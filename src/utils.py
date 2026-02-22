@@ -1,33 +1,14 @@
-import cv2
 from AppKit import NSScreen
 import subprocess
 import os
-from openai import OpenAI
 import sounddevice as sd
 import soundfile as sf
 import requests
 from pydub import AudioSegment
 from datetime import datetime
 
-openai_api_key = os.environ.get('OPENAI_API_KEY')
 xi_api_key = os.environ.get('ELEVEN_LABS_API_KEY')
 
-def take_picture():
-    cap = cv2.VideoCapture(0)
-    ramp_frames = 30 
-    if not cap.isOpened():
-        print("Error: Could not open camera.")
-        return None
-
-    for i in range(ramp_frames):
-        ret, frame = cap.read()
-
-    cap.release()
-    if ret:
-        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    else:
-        print("Error: Could not read frame.")
-        return None
 
 def get_number_of_screens():
     return len(NSScreen.screens())
@@ -41,7 +22,7 @@ def take_screenshots():
     if num_screens == 0:
         print("Error: No screens detected.")
         return []
-    
+
     screenshots = []
     for screen in range(1, num_screens+1):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -50,22 +31,18 @@ def take_screenshots():
             "screenshots",
             f"screen_{screen}_{timestamp}.png"
         )
-        subprocess.run(["screencapture", "-x", f"-D{screen}", save_filepath])
+        result = subprocess.run(
+            ["screencapture", "-x", f"-D{screen}", save_filepath],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            print(f"Warning: screencapture failed for display {screen}: {result.stderr}")
+            continue
+        if not os.path.exists(save_filepath):
+            print(f"Warning: screenshot file not created for display {screen}")
+            continue
         screenshots.append({"filepath": save_filepath, "timestamp": timestamp})
     return screenshots
-
-def text_to_speech_deprecated(text):
-    client = OpenAI(api_key=openai_api_key)
-    voice = client.audio.speech.create(
-        model="tts-1",
-        voice="alloy",
-        input=text,
-    )
-    voice_save_path = os.path.dirname(__file__)+"/yell_voice.wav"
-    voice.stream_to_file(voice_save_path)
-    audio_data, sample_rate = sf.read(voice_save_path)
-    sd.play(audio_data, sample_rate)
-    sd.wait()
 
 
 def get_text_to_speech(text, voice="Harry"):
@@ -77,22 +54,28 @@ def get_text_to_speech(text, voice="Harry"):
         "Josh": "TxGEqnHWrfWFTfGW9XjX",
         "Patrick" : "ODq5zmih8GrVes37Dizd"
     }
+    if voice not in character_dict:
+        raise ValueError(f"Unknown voice '{voice}'. Available: {list(character_dict.keys())}")
+
     CHUNK_SIZE = 1024
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{character_dict[voice]}"
     headers = {
-    "Accept": "audio/mpeg",
-    "Content-Type": "application/json",
-    "xi-api-key": xi_api_key
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": xi_api_key
     }
     data = {
-    "text": text,
-    "model_id": "eleven_monolingual_v1",
-    "voice_settings": {
-        "stability": 0.5,
-        "similarity_boost": 0.5
+        "text": text,
+        "model_id": "eleven_monolingual_v1",
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.5
         }
     }
-    response = requests.post(url, json=data, headers=headers)
+    response = requests.post(url, json=data, headers=headers, timeout=30)
+    if response.status_code != 200:
+        raise RuntimeError(f"Eleven Labs TTS failed (HTTP {response.status_code}): {response.text[:200]}")
+
     voice_path_mp3 = os.path.dirname(__file__)+"/yell_voice.mp3"
     with open(voice_path_mp3, 'wb') as f:
         for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
@@ -108,13 +91,3 @@ def play_text_to_speech(voice_file):
     data, samplerate = sf.read(voice_file)
     sd.play(data, samplerate)
     sd.wait()
-
-
-# def run_applescript(script_path):
-#     subprocess.call(['osascript', script_path])
-
-# def mute_applications():
-#     run_applescript(os.path.dirname(__file__)+'/mute_apps.applescript')
-
-# def unmute_applications():
-#     run_applescript(os.path.dirname(__file__)+'/unmute_apps.applescript')
