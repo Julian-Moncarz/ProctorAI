@@ -41,7 +41,7 @@ def take_screenshots():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         save_filepath = screenshots_dir / f"screen_{screen}_{timestamp}.png"
         result = subprocess.run(
-            ["screencapture", "-x", f"-D{screen}", str(save_filepath)],
+            ["/usr/sbin/screencapture", "-x", f"-D{screen}", str(save_filepath)],
             capture_output=True, text=True
         )
         if result.returncode != 0:
