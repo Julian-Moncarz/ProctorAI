@@ -42,16 +42,21 @@ class ProcrastinationEvent:
         label = tk.Label(root, font=('Helvetica', 48), fg='red')
         label.pack(expand=True)
 
-        def countdown(start_count):
-            try:
-                label['text'] = start_count
-                if start_count > 0:
-                    root.after(1000, countdown, start_count - 1)
-                else:
-                    root.destroy()
-            except tk.TclError:
-                pass  # Window already closed by user
+        after_id = [None]
 
+        def countdown(start_count):
+            label['text'] = start_count
+            if start_count > 0:
+                after_id[0] = root.after(1000, countdown, start_count - 1)
+            else:
+                root.destroy()
+
+        def on_close():
+            if after_id[0] is not None:
+                root.after_cancel(after_id[0])
+            root.destroy()
+
+        root.protocol("WM_DELETE_WINDOW", on_close)
         countdown(count)
         root.mainloop()
 
