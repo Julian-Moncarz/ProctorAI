@@ -168,7 +168,8 @@ class ProcrastinationApp(QWidget):
         """)
 
         # Create a shortcut for Command+Enter
-        shortcut = QShortcut(QKeySequence("Meta+Return"), self)
+        shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        shortcut.setContext(Qt.WindowShortcut)
         shortcut.activated.connect(self.start_button.click)
 
         self.settings_button = QPushButton('Settings (\u2318S)', self)
