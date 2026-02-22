@@ -164,7 +164,7 @@ class ProcrastinationApp(QWidget):
                 "--user_name", self.settings["user_name"],
             ])
 
-            self.process.setProgram("python3")
+            self.process.setProgram(sys.executable)
             self.process.setArguments(arguments)
             self.process.setProcessChannelMode(QProcess.MergedChannels)
             self.process.readyReadStandardOutput.connect(self.handle_stdout)

@@ -1,1 +1,2 @@
-python3 src/user_interface.py
+#!/bin/bash
+uv run python src/user_interface.py
