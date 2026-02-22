@@ -1,6 +1,6 @@
 # ProctorAI👁️
 ## 🔍 Overview
-ProctorAI is a multimodal AI that watches your screen and calls you out if it sees you procrastinating. Proctor works by taking screenshots of your computer every few seconds (at a specified interval) and feeding them into a multimodal model, such as Claude-3.5-Sonnet, GPT-4o, or LLaVA-1.5. If ProctorAI determines that you are not focused, it will take control of your screen and yell at you with a personalized message. After making you pledge to stop procrastinating, ProctorAI will then give you 15 seconds to close the source of procrastination or will continue to bug you.
+ProctorAI is a multimodal AI that watches your screen and calls you out if it sees you procrastinating. Proctor works by taking screenshots of your computer every few seconds (at a specified interval) and feeding them into OpenAI's gpt-5-nano. If ProctorAI determines that you are not focused, it will take control of your screen and yell at you with a personalized message. After making you pledge to stop procrastinating, ProctorAI will then give you 15 seconds to close the source of procrastination or will continue to bug you.
 
 <p align="center">
   <img src="./assets/demo.gif" alt="Project demo" width="400">
@@ -18,53 +18,72 @@ ProctorAI is a multimodal AI that watches your screen and calls you out if it se
 ***It's alive!*** A big design goal with Proctor is that it should *feel alive*. In my experience, I tend not to break the rules because I can intuitively *feel* the AI watching me--just like how test-takers are much less likely to cheat when they can *feel* the proctor of an exam watching them.
 
 ## 🚀 Setup and Installation
-To start the GUI, just type ./run.sh. You might get some popups asking to allow terminal access to certain utilities, which you should enable. The current implementation requires MacOS (and you can find a Windows-compatible version in the `windows` branch). We hope to make Proctor platform-independent soon. 
+To start the GUI, just type ./run.sh. You might get some popups asking to allow terminal access to certain utilities, which you should enable. The current implementation requires macOS.
+
 ```
 git clone https://github.com/jam3scampbell/ProctorAI
 cd ProctorAI
-python -m venv focusenv
-source focusenv/bin/activate
-pip install -r requirements.txt
+uv sync
 ./run.sh
 ```
 
-Depending on which models you want to use under-the-hood, you should define the following API keys as environment variables:
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GEMINI_API_KEY`
-- `ELEVEN_LABS_API_KEY`
+You need the following environment variables:
+- `OPENAI_API_KEY` (required)
+- `ELEVEN_LABS_API_KEY` (required for TTS feature)
 
-To keep the running API price low, I recommend using `two_tier` mode, with a local model such as LLaVA as the router model. For this, you will need [Ollama](https://ollama.com) and to install the [llava](https://ollama.com/library/llava) model. Make sure Ollama is running in the background before starting ProctorAI.
+## 🔁 Auto-Start on Login (macOS)
 
+To have ProctorAI launch automatically when you log in:
 
-## ⚙️ Options/Settings 
-The following can all be toggled in the settings page or used as arguments to `main.py`:
+1. Copy the included plist template and fill in your paths/keys:
+```bash
+cp com.proctorai.plist ~/Library/LaunchAgents/com.proctorai.plist
+```
+
+2. Edit `~/Library/LaunchAgents/com.proctorai.plist` and replace:
+   - `PROCTORAI_PATH` with the absolute path to your ProctorAI directory (e.g. `/Users/you/ProctorAI`)
+   - `YOUR_OPENAI_API_KEY` and `YOUR_ELEVEN_LABS_API_KEY` with your actual API keys
+
+3. Load the agent:
+```bash
+launchctl load ~/Library/LaunchAgents/com.proctorai.plist
+```
+
+The GUI will now appear on every login. To stop auto-starting:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.proctorai.plist
+```
+
+## ⚙️ Options/Settings
+The following can all be toggled in the settings page or used as CLI flags to `main.py`:
 | | |
 |------------------|---------------------------------------------------------------------------------------------------------|
-| `model_name`     | API name of the main model                                                                             |
 | `tts`            | Enable Eleven Labs text-to-speech                                                           |
 | `voice`          | Select the voice of Eleven Labs speaker                                                               |
-| `cli_mode`       | Run without GUI                                                                                        |
 | `delay_time`     | The amount of time between each screenshot                                                                   |
 | `initial_delay`  | The amount of time to wait before Proctor starts watching your screen (useful for giving you time to open what you want to work on)                                                            |
 | `countdown_time` | The amount of time Proctor gives to close the source of procrastination                                                            |
 | `user_name`      | Enter your name to make the experience more personalized                                                       |
-| `print_CoT`      | Print the model's chain-of-thought to the console                                                       |
-| `two_tier`       | If activated, first sends image to router_model and only sends up to the main model if the router_model thinks the user is procrastinating. Useful for bringing down API costs. The router model is given a stricter prompt so that it leans towards flagging behavior it thinks is suspicious.                                          |
-| `router_model`   | API name of the model to use as the router                                                                           |
 
 
 ## 🎯 Understanding This Repository
 
 Right now, basically all functionality is contained in the following files:
-- `main.py`: contains the main control loop that takes screenshots, calls the model, and initiates procrastination events
-- `user_interface.py`: runs the GUI written in PyQT5
-- `api_models.py`: houses a unified interface for calling different model families
-- `procrastination_event.py`: contains methods for displaying the popup when the user is caught procrastinating as well as the timer telling the user to leave what they were doing
-- `utils.py`: functions for taking screenshots, tts, etc
-- `config_prompts.yaml`: all prompts used in the LLM scaffolded system
+- `src/main.py`: contains the main control loop that takes screenshots, calls the model, and initiates procrastination events
+- `src/user_interface.py`: runs the GUI written in PyQt5
+- `src/procrastination_event.py`: contains methods for displaying the popup when the user is caught procrastinating as well as the timer telling the user to leave what they were doing
+- `src/utils.py`: functions for taking screenshots, tts, etc
+- `src/config_prompts.yaml`: all prompts used in the LLM scaffolded system
 
 As the program runs, it'll create a `settings.json` file and a `screenshots` folder in the root directory. If TTS is enabled, it'll also write `yell_voice.mp3` to the `src` folder.
+
+## 🧪 Testing
+
+```bash
+uv run pytest
+```
+
+Tests live in `tests/`.
 
 ## 🌐 Roadmap and Future Improvements
 This project is still very much under active development. Some features I'm hoping to add next:
