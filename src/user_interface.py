@@ -1,11 +1,16 @@
 import sys
+import json
+from pathlib import Path
+
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QTextEdit, QPushButton, QHBoxLayout, QLineEdit
 from PyQt5.QtWidgets import QDialog, QFormLayout, QCheckBox, QSpinBox, QComboBox, QShortcut
-from PyQt5.QtGui import QIcon, QFont, QPixmap, QBrush, QPalette
+from PyQt5.QtGui import QIcon, QFont, QPixmap, QBrush, QPalette, QColor, QTextCursor, QTextCharFormat, QKeySequence
 from PyQt5.QtCore import QTime, QTimer, Qt, QProcess
-from PyQt5.QtGui import QColor, QTextCursor, QTextCharFormat, QKeySequence
-import json
-import os
+
+from utils import VOICES
+
+_SRC_DIR = Path(__file__).parent
+_PROJECT_DIR = _SRC_DIR.parent
 
 
 class SettingsDialog(QDialog):
@@ -21,7 +26,7 @@ class SettingsDialog(QDialog):
 
         # voice flag
         self.voice_combobox = QComboBox()
-        self.voice_combobox.addItems(["Adam", "Arnold", "Emily", "Harry", "Josh", "Patrick"])
+        self.voice_combobox.addItems(list(VOICES.keys()))
         self.layout.addRow("Voice", self.voice_combobox)
 
         # delay_time flag
@@ -69,7 +74,7 @@ class SettingsDialog(QDialog):
 class ProcrastinationApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.cur_dir = os.path.dirname(__file__)
+        self.cur_dir = _SRC_DIR
         self.initUI()
         self.start_time = None
         self.timer = QTimer()
@@ -163,7 +168,7 @@ class ProcrastinationApp(QWidget):
         """)
 
         # Create a shortcut for Command+Enter
-        shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        shortcut = QShortcut(QKeySequence("Meta+Return"), self)
         shortcut.activated.connect(self.start_button.click)
 
         self.settings_button = QPushButton('Settings (\u2318S)', self)
@@ -248,7 +253,7 @@ class ProcrastinationApp(QWidget):
             self.running_label.setText(f"Task in progress: {task_description}")
 
             self.process = QProcess(self)
-            arguments = ["-u", os.path.dirname(__file__) + "/main.py"]
+            arguments = ["-u", str(_SRC_DIR / "main.py")]
 
             if self.settings["tts"]:
                 arguments.append("--tts")
@@ -314,7 +319,7 @@ class ProcrastinationApp(QWidget):
         self.close()
 
     def resizeEvent(self, event):
-        background_image = QPixmap(os.path.dirname(self.cur_dir) + '/assets/space_2.jpg')
+        background_image = QPixmap(str(_PROJECT_DIR / 'assets/space_2.jpg'))
         scaled_background = background_image.scaled(self.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
         palette = QPalette()
@@ -379,31 +384,29 @@ class ProcrastinationApp(QWidget):
             self.typing_timer.stop()
 
 
+_SETTINGS_FILE = _PROJECT_DIR / "settings.json"
+
+
 def load_settings():
-    settings_file = os.path.dirname(os.path.dirname(__file__)) + "/settings.json"
-    if os.path.exists(settings_file):
-        with open(settings_file, "r") as file:
-            return json.load(file)
-    else:
-        return {
-            "tts": False,
-            "voice": "Patrick",
-            "delay_time": 0,
-            "initial_delay": 0,
-            "countdown_time": 15,
-            "user_name": "Procrastinator",
-        }
+    if _SETTINGS_FILE.exists():
+        return json.loads(_SETTINGS_FILE.read_text())
+    return {
+        "tts": False,
+        "voice": "Patrick",
+        "delay_time": 0,
+        "initial_delay": 0,
+        "countdown_time": 15,
+        "user_name": "Procrastinator",
+    }
 
 
 def save_settings(settings):
-    settings_file = os.path.dirname(os.path.dirname(__file__)) + "/settings.json"
-    with open(settings_file, "w") as file:
-        json.dump(settings, file)
+    _SETTINGS_FILE.write_text(json.dumps(settings))
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon(os.path.dirname(os.path.dirname(__file__)) + '/assets/icon_rounded.png'))
+    app.setWindowIcon(QIcon(str(_PROJECT_DIR / 'assets/icon_rounded.png')))
     app.setApplicationName('ProctorAI\U0001f441\ufe0f')
     ex = ProcrastinationApp()
     sys.exit(app.exec_())
