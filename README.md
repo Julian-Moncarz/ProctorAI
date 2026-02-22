@@ -21,25 +21,33 @@ You need the following environment variables:
 
 ## 🔁 Auto-Start on Login (macOS)
 
-To have ProctorAI launch automatically when you log in:
+ProctorAI will launch automatically on login and **respawn if killed** (`KeepAlive` is enabled). You can't escape it until you unload the agent.
 
-1. Copy the included plist template and fill in your paths/keys:
+**Prerequisites:**
+- Run `uv sync` first to install dependencies
+- Grant **Screen Recording** permission to Terminal (or whichever app launches it) in System Settings > Privacy & Security > Screen Recording — otherwise screenshots will be blank
+
+**Steps:**
+
+1. Create the LaunchAgents directory (if it doesn't exist) and copy the plist:
 ```bash
+mkdir -p ~/Library/LaunchAgents
 cp com.proctorai.plist ~/Library/LaunchAgents/com.proctorai.plist
 ```
 
 2. Edit `~/Library/LaunchAgents/com.proctorai.plist` and replace:
    - `PROCTORAI_PATH` with the absolute path to your ProctorAI directory (e.g. `/Users/you/ProctorAI`)
+   - `HOME_DIR` with your home directory (e.g. `/Users/you`) — needed so launchd can find `uv`
    - `YOUR_OPENAI_API_KEY` and `YOUR_ELEVEN_LABS_API_KEY` with your actual API keys
 
 3. Load the agent:
 ```bash
-launchctl load ~/Library/LaunchAgents/com.proctorai.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.proctorai.plist
 ```
 
-The GUI will now appear on every login. To stop auto-starting:
+The GUI will now appear on every login and respawn if killed. To stop:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.proctorai.plist
+launchctl bootout gui/$(id -u)/com.proctorai
 ```
 
 ## ⚙️ Options/Settings
