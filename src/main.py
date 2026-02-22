@@ -119,6 +119,27 @@ def procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, i
     procrastination_event.play_countdown(countdown_time, brief_message=f"You have {countdown_time} seconds to close " + countdown_message.strip())
 
 
+def process_one_cycle(user_spec, tts, voice, countdown_time, user_name):
+    """Run one screenshot-check-respond cycle. Returns the determination string."""
+    screenshots = take_screenshots()
+    filepaths = [shot["filepath"] for shot in screenshots]
+
+    determination = determine_productivity(user_spec, filepaths)
+    print(f"Determination: {determination}")
+
+    if determination == "procrastinating":
+        procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, filepaths)
+
+    # Delete screenshots after use
+    for fp in filepaths:
+        try:
+            os.remove(fp)
+        except OSError:
+            pass
+
+    return determination
+
+
 def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_time=15, user_name="Procrastinator"):
     os.makedirs(os.path.dirname(os.path.dirname(__file__)) + "/screenshots", exist_ok=True)
 
@@ -127,22 +148,7 @@ def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_ti
     time.sleep(initial_delay)
 
     while True:
-        screenshots = take_screenshots()
-        filepaths = [shot["filepath"] for shot in screenshots]
-
-        determination = determine_productivity(user_spec, filepaths)
-        print(f"Determination: {determination}")
-
-        if determination == "procrastinating":
-            procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, filepaths)
-
-        # Delete screenshots after use
-        for fp in filepaths:
-            try:
-                os.remove(fp)
-            except OSError:
-                pass
-
+        process_one_cycle(user_spec, tts, voice, countdown_time, user_name)
         time.sleep(delay_time)
 
 
