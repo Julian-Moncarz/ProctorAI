@@ -1,8 +1,12 @@
 from pathlib import Path
 from datetime import datetime
 import subprocess
+import base64
+import tempfile
+from io import BytesIO
 
 from AppKit import NSScreen
+from PIL import Image
 import sounddevice as sd
 import soundfile as sf
 import requests
@@ -54,6 +58,18 @@ def take_screenshots():
     return screenshots
 
 
+def encode_image_720p(image_path):
+    """Resize image to 720p and return base64-encoded PNG string."""
+    img = Image.open(image_path)
+    w, h = img.size
+    scale = 1280 / max(w, h)
+    if scale < 1:
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 def get_text_to_speech(text, voice="Harry"):
     if voice not in VOICES:
         raise ValueError(f"Unknown voice '{voice}'. Available: {list(VOICES.keys())}")
@@ -74,16 +90,18 @@ def get_text_to_speech(text, voice="Harry"):
     if response.status_code != 200:
         raise RuntimeError(f"Eleven Labs TTS failed (HTTP {response.status_code}): {response.text[:200]}")
 
-    voice_path_mp3 = _SRC_DIR / "yell_voice.mp3"
-    with open(voice_path_mp3, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-            if chunk:
-                f.write(chunk)
+    mp3_file = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+        if chunk:
+            mp3_file.write(chunk)
+    mp3_file.close()
 
-    voice_path_wav = _SRC_DIR / "yell_voice.wav"
-    audio = AudioSegment.from_mp3(voice_path_mp3)
-    audio.export(voice_path_wav, format="wav")
-    return str(voice_path_wav)
+    wav_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    wav_file.close()
+    audio = AudioSegment.from_mp3(mp3_file.name)
+    audio.export(wav_file.name, format="wav")
+    os.unlink(mp3_file.name)
+    return wav_file.name
 
 
 def play_text_to_speech(voice_file):

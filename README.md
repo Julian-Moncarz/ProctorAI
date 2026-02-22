@@ -3,7 +3,9 @@
 Forked and updated for personal use
 
 ## 🔍 Overview
-ProctorAI is a multimodal AI that watches your screen and calls you out if it sees you procrastinating. Proctor works by taking screenshots of your computer every few seconds (at a specified interval) and feeding them into OpenAI's gpt-5-nano. If ProctorAI determines that you are not focused, it will take control of your screen and yell at you with a personalized message, then give you 15 seconds to close the source of procrastination or will continue to bug you.
+ProctorAI is a multimodal AI that watches your screen and calls you out if it sees you procrastinating. Proctor works by taking screenshots of your computer every few seconds (at a specified interval) and feeding them into Google's Gemini 2.5 Flash-Lite. If ProctorAI determines that you are not focused, it will take control of your screen and yell at you with a personalized message, then give you 15 seconds to close the source of procrastination or will continue to bug you.
+
+**Why Gemini 2.5 Flash-Lite?** We benchmarked gpt-5-nano, Groq Llama 4 Scout, and Gemini 2.5 Flash-Lite. Gemini gives us ~1.5s per-cycle latency (down from ~23s on gpt-5-nano) at the lowest cost ($0.10/$0.40 per 1M tokens) — cheap enough to run checks every couple of seconds. Screenshots are downsized to 720p before sending, which we verified preserves all text readability (window titles, URLs, tab names) while cutting payload size by 6x.
 
 ## 🚀 Setup and Installation
 To start the GUI, just type ./run.sh. You might get some popups asking to allow terminal access to certain utilities, which you should enable. The current implementation requires macOS.
@@ -16,7 +18,7 @@ uv sync
 ```
 
 You need the following environment variables:
-- `OPENAI_API_KEY` (required)
+- `GOOGLE_API_KEY` (required — get one free at https://aistudio.google.com/apikey)
 - `ELEVEN_LABS_API_KEY` (required for TTS feature)
 
 ## 🔁 Auto-Start on Login (macOS)
@@ -38,7 +40,7 @@ cp com.proctorai.plist ~/Library/LaunchAgents/com.proctorai.plist
 2. Edit `~/Library/LaunchAgents/com.proctorai.plist` and replace:
    - `PROCTORAI_PATH` with the absolute path to your ProctorAI directory (e.g. `/Users/you/ProctorAI`)
    - `HOME_DIR` with your home directory (e.g. `/Users/you`) — needed so launchd can find `uv`
-   - `YOUR_OPENAI_API_KEY` and `YOUR_ELEVEN_LABS_API_KEY` with your actual API keys
+   - `YOUR_GOOGLE_API_KEY` and `YOUR_ELEVEN_LABS_API_KEY` with your actual API keys
 
 3. Load the agent:
 ```bash

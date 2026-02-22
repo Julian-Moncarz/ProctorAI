@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-ProctorAI is a macOS-only multimodal AI productivity tool. It periodically screenshots your screen, sends images to OpenAI (hardcoded to gpt-5-nano), and intervenes with a full-screen popup when it detects procrastination. The user defines their task, allowed behaviors, and what counts as procrastination before each session.
+ProctorAI is a macOS-only multimodal AI productivity tool. It periodically screenshots your screen, sends images to Gemini 2.5 Flash-Lite via the Google GenAI SDK, and intervenes with a full-screen popup when it detects procrastination. The user defines their task, allowed behaviors, and what counts as procrastination before each session.
 
 ## Running
 
@@ -42,11 +42,9 @@ main.py (core loop)
   1. Read task spec from stdin
   2. Wait initial_delay, then loop:
      a. utils.take_screenshots() → macOS screencapture, all monitors
-     b. determine_productivity() → OpenAI structured JSON output (productive/procrastinating + reasoning)
-     c. If procrastinating → parallel_api_calls() gets 2 messages concurrently:
-        - heckler message (snarky coach text)
-        - countdown message (one-word distraction source)
-     d. procrastination_sequence() → show popup, play TTS, run countdown
+     b. encode_image_720p() → downsize to 720p for faster API calls
+     c. _check_screen() → single Gemini API call returns determination + heckler message
+     d. If procrastinating → show popup, play TTS, run countdown
      e. Log determination, reasoning + screenshots to logs/<session>/session.jsonl
 
 procrastination_event.py (Tkinter)
@@ -55,21 +53,22 @@ procrastination_event.py (Tkinter)
 
 utils.py
   - take_screenshots(): macOS `screencapture` command
+  - encode_image_720p(): downsize screenshots for faster API calls
   - TTS via Eleven Labs API, playback via sounddevice
 
 config_prompts.yaml
-  - All LLM system/user prompts for: determination, heckler, countdown roles
+  - Combined system/user prompts for single-call screen check
 ```
 
 ## Key Design Details
 
 - **Two GUI frameworks**: PyQt5 for main app, Tkinter for procrastination popup (separate process context)
-- **Parallel API calls**: heckler and countdown messages fetched concurrently via ThreadPoolExecutor
+- **Single API call**: determination + heckler message in one Gemini call (~1.5s per cycle)
 - **Audit logging**: each session saves screenshots and a JSONL log to `logs/<timestamp>/` (includes task spec, determination reasoning)
 - **Settings persistence**: `settings.json` (gitignored, created at runtime)
 - **Platform**: macOS only (screencapture, PyObjC)
 
 ## Environment Variables
 
-- `OPENAI_API_KEY` (required)
+- `GOOGLE_API_KEY` (required)
 - `ELEVEN_LABS_API_KEY` (required for TTS feature)

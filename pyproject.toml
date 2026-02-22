@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "macOS multimodal AI productivity tool"
 requires-python = ">=3.13"
 dependencies = [
-    "openai>=1.30,<3",
     "PyQt5>=5.15,<6",
     "requests>=2.31,<3",
     "pydub>=0.25,<1",
@@ -13,6 +12,8 @@ dependencies = [
     "PyYAML>=6.0,<7",
     "pyobjc-framework-Cocoa>=10.0,<12",
     "audioop-lts>=0.2.2,<1",
+    "pillow>=12.1.1",
+    "google-genai>=1.64.0",
 ]
 
 [dependency-groups]
