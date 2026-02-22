@@ -3,9 +3,22 @@ import tkinter as tk
 
 
 class ProcrastinationEvent:
-    def show_popup(self, ai_message, pledge_message):
+    def show_popup(self, ai_message):
         root = tk.Tk()
-        app = FocusPopup(root, ai_message, pledge_message)
+        root.title("Focus Reminder")
+        root.attributes('-fullscreen', True)
+        root.configure(bg='white')
+
+        label = tk.Label(
+            root,
+            text=ai_message,
+            font=("Helvetica", 24),
+            bg='white',
+            fg='black',
+            wraplength=root.winfo_screenwidth() - 100
+        )
+        label.pack(expand=True)
+
         root.mainloop()
 
     def play_countdown(self, count, brief_message="You have 10 seconds to close it."):
@@ -30,61 +43,20 @@ class ProcrastinationEvent:
         label.pack(expand=True)
 
         def countdown(start_count):
-            label['text'] = start_count
-            if start_count > 0:
-                root.after(1000, countdown, start_count - 1)
+            try:
+                label['text'] = start_count
+                if start_count > 0:
+                    root.after(1000, countdown, start_count - 1)
+                else:
+                    root.destroy()
+            except tk.TclError:
+                pass  # Window already closed by user
 
         countdown(count)
         root.mainloop()
 
 
-class FocusPopup:
-    def __init__(self, master, ai_message, pledge_message):
-        self.master = master
-        self.master.title("Focus Reminder")
-        self.master.attributes('-fullscreen', True)
-        self.master.configure(bg='white')
-
-        # AI personalized message at the top with wrapping
-        self.ai_message_label = tk.Label(
-            master,
-            text=ai_message,
-            font=("Helvetica", 24),
-            bg='white',
-            fg='black',
-            wraplength=self.master.winfo_screenwidth() - 100  # Wrap text to fit the screen width with padding
-        )
-        self.ai_message_label.pack(pady=50, side=tk.TOP)
-
-        
-        # Pledge message and entry at the bottom
-        self.bottom_frame = tk.Frame(master, bg='white')
-        self.bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=50)
-
-        self.label = tk.Label(self.bottom_frame, text="Please type the following to continue working:", font=("Helvetica", 18), bg='white', fg='black')
-        self.label.pack(pady=10)
-
-        self.challenge_text = pledge_message.strip()
-        self.challenge_label = tk.Label(self.bottom_frame, text=self.challenge_text, font=("Helvetica", 16), bg='white', fg='black')
-        self.challenge_label.pack(pady=10)
-
-        self.entry = tk.Entry(self.bottom_frame, font=("Helvetica", 16), width=50)
-        self.entry.pack(pady=10)
-        self.entry.bind('<Return>', self.check_input)
-
-        self.result_label = tk.Label(self.bottom_frame, text="", font=("Helvetica", 16), bg='white', fg='black')
-        self.result_label.pack(pady=10)
-
-    def check_input(self, event):
-        user_input = self.entry.get()
-        if user_input == self.challenge_text:
-            self.master.destroy()  # Ends the mainloop
-        else:
-            self.result_label.config(text="Incorrect input. Please try again.", fg='red')
-            self.entry.delete(0, tk.END)
-
-
 if __name__ == "__main__":
     procrastination_event = ProcrastinationEvent()
-    procrastination_event.show_popup("You are procrastinating. Please focus on your work.", "I will focus on my work.")
+    procrastination_event.show_popup("You are procrastinating. Please focus on your work.")
     procrastination_event.play_countdown(10)
