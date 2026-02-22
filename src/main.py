@@ -72,12 +72,16 @@ def determine_productivity(user_spec, image_filepaths):
                 "schema": {
                     "type": "object",
                     "properties": {
+                        "reasoning": {
+                            "type": "string",
+                            "description": "Brief explanation of why this determination was made"
+                        },
                         "determination": {
                             "type": "string",
                             "enum": ["productive", "procrastinating"]
                         }
                     },
-                    "required": ["determination"],
+                    "required": ["reasoning", "determination"],
                     "additionalProperties": False
                 }
             }
@@ -86,7 +90,7 @@ def determine_productivity(user_spec, image_filepaths):
     )
 
     result = json.loads(response.choices[0].message.content)
-    return result["determination"]
+    return result["determination"], result["reasoning"]
 
 
 def make_api_call(role, user_prompt, system_prompt=None, image_paths=None):
@@ -160,8 +164,8 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
         return "skipped"
 
     try:
-        determination = determine_productivity(user_spec, filepaths)
-        print(f"Determination: {determination}")
+        determination, reasoning = determine_productivity(user_spec, filepaths)
+        print(f"Determination: {determination} | Reasoning: {reasoning}")
 
         heckler_msg = pledge_msg = countdown_msg = None
         if determination == "procrastinating":
@@ -184,6 +188,7 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "screenshots": saved_names,
         "determination": determination,
+        "reasoning": reasoning,
     }
     if determination == "procrastinating":
         entry["heckler"] = heckler_msg
@@ -202,6 +207,10 @@ def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_ti
     log_dir.mkdir(parents=True, exist_ok=True)
 
     user_spec = input()
+
+    # Log task spec at session start
+    with open(log_dir / "session.jsonl", "a") as f:
+        f.write(json.dumps({"timestamp": datetime.now().isoformat(timespec="seconds"), "type": "session_start", "task_spec": user_spec}) + "\n")
 
     signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
     signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
