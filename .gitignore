@@ -1,5 +1,6 @@
 focusenv/
 screenshots/
+logs/
 settings.json
 __pycache__/
 .venv/

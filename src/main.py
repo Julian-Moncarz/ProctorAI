@@ -5,9 +5,11 @@ import sys
 import json
 import base64
 import signal
+import shutil
 import yaml
 import threading
 import concurrent.futures
+from datetime import datetime
 from pathlib import Path
 
 from openai import OpenAI
@@ -121,18 +123,15 @@ def parallel_api_calls(api_params):
 def procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, image_filepaths):
     api_params = [
         {"role": "heckler", "user_prompt": config["user_prompt_heckler"].format(user_spec=user_spec, user_name=user_name), "system_prompt": config["system_prompt_heckler"].format(user_name=user_name), "image_paths": image_filepaths},
-        {"role": "pledge", "user_prompt": config["user_prompt_pledge"].format(user_spec=user_spec, user_name=user_name), "system_prompt": config["system_prompt_pledge"], "image_paths": image_filepaths},
         {"role": "countdown", "user_prompt": config["user_prompt_countdown"].format(user_spec=user_spec), "system_prompt": config["system_prompt_countdown"], "image_paths": image_filepaths}
     ]
 
     api_results = parallel_api_calls(api_params)
 
-    heckler_message = pledge_message = countdown_message = ""
+    heckler_message = countdown_message = ""
     for api_result in api_results:
         if api_result["role"] == "heckler":
             heckler_message = api_result["result"]
-        elif api_result["role"] == "pledge":
-            pledge_message = api_result["result"]
         elif api_result["role"] == "countdown":
             countdown_message = api_result["result"]
 
@@ -145,11 +144,13 @@ def procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, i
             print(f"Warning: TTS failed, continuing without audio: {e}")
 
     procrastination_event = ProcrastinationEvent()
-    procrastination_event.show_popup(heckler_message, pledge_message)
+    procrastination_event.show_popup(heckler_message)
     procrastination_event.play_countdown(countdown_time, brief_message=f"You have {countdown_time} seconds to close {countdown_message.strip()}")
 
+    return heckler_message, "", countdown_message.strip()
 
-def process_one_cycle(user_spec, tts, voice, countdown_time, user_name):
+
+def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir):
     """Run one screenshot-check-respond cycle. Returns the determination string."""
     screenshots = take_screenshots()
     filepaths = [shot["filepath"] for shot in screenshots]
@@ -162,23 +163,43 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name):
         determination = determine_productivity(user_spec, filepaths)
         print(f"Determination: {determination}")
 
+        heckler_msg = pledge_msg = countdown_msg = None
         if determination == "procrastinating":
-            procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, filepaths)
+            heckler_msg, pledge_msg, countdown_msg = procrastination_sequence(
+                user_spec, user_name, tts, voice, countdown_time, filepaths
+            )
     finally:
-        # Delete screenshots after all API calls are done
+        # Move screenshots to log dir
+        saved_names = []
         for fp in filepaths:
             try:
-                os.remove(fp)
-            except FileNotFoundError:
-                pass
+                dest = log_dir / Path(fp).name
+                shutil.move(fp, dest)
+                saved_names.append(Path(fp).name)
             except OSError as e:
-                print(f"Warning: could not delete {fp}: {e}")
+                print(f"Warning: could not move {fp} to log dir: {e}")
+
+    # Append audit log entry
+    entry = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "screenshots": saved_names,
+        "determination": determination,
+    }
+    if determination == "procrastinating":
+        entry["heckler"] = heckler_msg
+        entry["pledge"] = pledge_msg
+        entry["countdown_word"] = countdown_msg
+    with open(log_dir / "session.jsonl", "a") as f:
+        f.write(json.dumps(entry) + "\n")
 
     return determination
 
 
 def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_time=15, user_name="Procrastinator"):
     os.makedirs(Path(__file__).parent.parent / "screenshots", exist_ok=True)
+
+    log_dir = Path(__file__).parent.parent / "logs" / datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     user_spec = input()
 
@@ -189,7 +210,7 @@ def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_ti
 
     while not _shutdown.is_set():
         try:
-            process_one_cycle(user_spec, tts, voice, countdown_time, user_name)
+            process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
         except KeyboardInterrupt:
             break
         except Exception as e:
