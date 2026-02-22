@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QTextEdit, QPushButton, QHBoxLayout, QLineEdit
 from PyQt5.QtWidgets import QDialog, QFormLayout, QCheckBox, QSpinBox, QComboBox, QShortcut
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon, QFont, QPixmap, QBrush, QPalette
 from PyQt5.QtCore import QTime, QTimer, Qt, QProcess
 from PyQt5.QtGui import QColor, QTextCursor, QTextCharFormat, QKeySequence
 import json
@@ -29,6 +29,11 @@ class SettingsDialog(QDialog):
         self.delay_time_spinbox.setRange(0, 100000)
         self.layout.addRow("Delay Time", self.delay_time_spinbox)
 
+        # initial_delay flag
+        self.initial_delay_spinbox = QSpinBox()
+        self.initial_delay_spinbox.setRange(0, 100000)
+        self.layout.addRow("Initial Delay", self.initial_delay_spinbox)
+
         # countdown_time flag
         self.countdown_time_spinbox = QSpinBox()
         self.countdown_time_spinbox.setRange(0, 100)
@@ -55,6 +60,7 @@ class SettingsDialog(QDialog):
             "tts": self.tts_checkbox.isChecked(),
             "voice": self.voice_combobox.currentText(),
             "delay_time": self.delay_time_spinbox.value(),
+            "initial_delay": self.initial_delay_spinbox.value(),
             "countdown_time": self.countdown_time_spinbox.value(),
             "user_name": self.user_name_lineedit.text(),
         }
@@ -74,33 +80,111 @@ class ProcrastinationApp(QWidget):
         self.apply_settings()
 
     def initUI(self):
-        self.setWindowTitle('ProctorAI')
+        self.setWindowTitle('ProctorAI\U0001f441\ufe0f')
         self.setGeometry(100, 100, 800, 600)
 
         self.layout = QVBoxLayout()
 
-        # Prompt label
+        # Stylish prompt label with typing animation
+        pretitle = 'Welcome to ProctorAI\U0001f441\ufe0f'
         title = 'What are you looking to get done today?'
-        self.prompt_label = QLabel(title, self)
-        self.prompt_label.setFont(QFont('Arial', 24, QFont.Bold))
+        subtitle_1 = 'What behaviors do you want me to allow?'
+        subtitle_2 = 'What behaviors do you want me to call you out on?'
+        subtitle_3 = "You've got this"
+        subtitle_4 = "And if you dare to procrastinate, I will make you pay the price ;)"
+        self.prompt_label = QLabel(self)
+        self.full_text = f"""
+            <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
+                {pretitle}
+            </span>
+            <br>
+            <span style="font-family: Arial; font-size: 28px; color: #ffffff; font-weight: 900;">
+                {title}
+            </span>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
+                {subtitle_1}
+            </span>
+            <br>
+            <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
+                {subtitle_2}
+            </span>
+            <br>
+            <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
+                {subtitle_3}
+            </span>
+            <br>
+            <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
+                {subtitle_4}
+            </span>
+        """
+        self.current_text = ""
+        self.text_index = 0
+        self.parts = self.split_text_into_parts(self.full_text)
+
+        self.typing_timer = QTimer(self)
+        self.typing_timer.timeout.connect(self.update_text)
 
         self.prompt_input = QTextEdit(self)
-        self.prompt_input.setFont(QFont('Arial', 16))
+        self.prompt_input.setFont(QFont('Courier New', 16))
         self.prompt_input.setLineWrapMode(QTextEdit.WidgetWidth)
         self.prompt_input.setPlaceholderText("Type your task description here...")
         self.prompt_input.setFixedHeight(100)
+        self.prompt_input.setStyleSheet("""
+            QTextEdit {
+                border: 1.5px solid #39FF14;
+                border-radius: 20px;
+                background-color: black;
+                color: white;
+            }
+        """)
 
-        self.start_button = QPushButton('Start', self)
+        self.start_button = QPushButton('Start (\u2318\u23ce)', self)
         self.start_button.clicked.connect(self.start_task)
-        self.start_button.setFont(QFont('Arial', 16))
+        self.start_button.setStyleSheet("""
+            QPushButton {
+                border: 2px solid #8f8f91;
+                border-radius: 25px;
+                background-color: #3a3a3c;
+                color: white;
+                font-size: 18px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #575759;
+            }
+            QPushButton:pressed {
+                background-color: #2e2e30;
+            }
+        """)
 
         # Create a shortcut for Command+Enter
         shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         shortcut.activated.connect(self.start_button.click)
 
-        self.settings_button = QPushButton('Settings', self)
+        self.settings_button = QPushButton('Settings (\u2318S)', self)
         self.settings_button.clicked.connect(self.open_settings)
-        self.settings_button.setFont(QFont('Arial', 16))
+        self.settings_button.setGeometry(200, 150, 100, 100)
+        self.settings_button.setStyleSheet("""
+            QPushButton {
+                border: 5px solid #4CAF50;
+                border-radius: 50px;
+                background-color: #4CAF50;
+                color: white;
+                font-size: 16px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #388E3C;
+            }
+        """)
 
         settings_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         settings_shortcut.activated.connect(self.settings_button.click)
@@ -118,13 +202,23 @@ class ProcrastinationApp(QWidget):
 
         # Running screen elements (hidden initially)
         self.running_label = QLabel('Task in progress: ', self)
-        self.running_label.setFont(QFont('Arial', 16, QFont.Bold))
+        self.running_label.setFont(QFont('Arial', 16, QFont.Bold, italic=True))
+        self.running_label.setStyleSheet("color: white;")
         self.running_label.setWordWrap(True)
         self.timer_label = QLabel('Time Elapsed: 00:00:00', self)
-        self.timer_label.setFont(QFont('Arial', 16))
+        self.timer_label.setFont(QFont('Arial', 16, QFont.Bold, italic=True))
+        self.timer_label.setStyleSheet("color: white;")
         self.output_display = QTextEdit(self)
         self.output_display.setReadOnly(True)
-        self.output_display.setFont(QFont('Arial', 14))
+        self.output_display.setFont(QFont('Arial', 16, QFont.Bold, italic=True))
+        self.output_display.setStyleSheet("""
+            QTextEdit {
+                border: 1.5px solid #39FF14;
+                border-radius: 20px;
+                background-color: black;
+                color: white;
+            }
+        """)
 
         self.stop_button = QPushButton('Stop', self)
         self.stop_button.clicked.connect(self.stop_task)
@@ -141,6 +235,7 @@ class ProcrastinationApp(QWidget):
 
         self.setLayout(self.layout)
         self.show()
+        self.typing_timer.start(50)
 
     def start_task(self, task_description=None):
         if not task_description:
@@ -160,6 +255,7 @@ class ProcrastinationApp(QWidget):
             arguments.extend([
                 "--voice", self.settings["voice"],
                 "--delay_time", str(self.settings["delay_time"]),
+                "--initial_delay", str(self.settings.get("initial_delay", 0)),
                 "--countdown_time", str(self.settings["countdown_time"]),
                 "--user_name", self.settings["user_name"],
             ])
@@ -217,6 +313,14 @@ class ProcrastinationApp(QWidget):
         print("Stopping task")
         self.close()
 
+    def resizeEvent(self, event):
+        background_image = QPixmap(os.path.dirname(self.cur_dir) + '/assets/space_2.jpg')
+        scaled_background = background_image.scaled(self.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+
+        palette = QPalette()
+        palette.setBrush(QPalette.Background, QBrush(scaled_background))
+        self.setPalette(palette)
+
     def open_settings(self):
         if self.settings_dialog.exec_():
             self.settings = self.settings_dialog.get_settings()
@@ -227,8 +331,52 @@ class ProcrastinationApp(QWidget):
         self.settings_dialog.tts_checkbox.setChecked(self.settings["tts"])
         self.settings_dialog.voice_combobox.setCurrentText(self.settings["voice"])
         self.settings_dialog.delay_time_spinbox.setValue(self.settings["delay_time"])
+        self.settings_dialog.initial_delay_spinbox.setValue(self.settings.get("initial_delay", 0))
         self.settings_dialog.countdown_time_spinbox.setValue(self.settings["countdown_time"])
         self.settings_dialog.user_name_lineedit.setText(self.settings["user_name"])
+
+    def split_text_into_parts(self, text):
+        parts = []
+        temp = ""
+        in_tag = False
+
+        for char in text:
+            if char == '<':
+                if temp:
+                    parts.append(('text', temp.strip()))
+                    temp = ""
+                in_tag = True
+                temp += char
+            elif char == '>':
+                temp += char
+                parts.append(('tag', temp))
+                temp = ""
+                in_tag = False
+            else:
+                temp += char
+
+        if temp:
+            parts.append(('text', temp.strip()))
+
+        return parts
+
+    def update_text(self):
+        if self.text_index < len(self.parts):
+            part_type, part_content = self.parts[self.text_index]
+
+            if part_type == 'tag':
+                self.current_text += part_content
+                self.text_index += 1
+            else:
+                if part_content:
+                    self.current_text += part_content[0]
+                    self.parts[self.text_index] = ('text', part_content[1:])
+                else:
+                    self.text_index += 1
+
+            self.prompt_label.setText(self.current_text)
+        else:
+            self.typing_timer.stop()
 
 
 def load_settings():
@@ -241,6 +389,7 @@ def load_settings():
             "tts": False,
             "voice": "Patrick",
             "delay_time": 0,
+            "initial_delay": 0,
             "countdown_time": 15,
             "user_name": "Procrastinator",
         }
@@ -255,6 +404,6 @@ def save_settings(settings):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(os.path.dirname(os.path.dirname(__file__)) + '/assets/icon_rounded.png'))
-    app.setApplicationName('ProctorAI')
+    app.setApplicationName('ProctorAI\U0001f441\ufe0f')
     ex = ProcrastinationApp()
     sys.exit(app.exec_())
