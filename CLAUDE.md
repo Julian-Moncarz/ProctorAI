@@ -43,14 +43,14 @@ main.py (core loop)
   2. Wait initial_delay, then loop:
      a. utils.take_screenshots() → macOS screencapture, all monitors
      b. determine_productivity() → OpenAI structured JSON output (productive/procrastinating)
-     c. If procrastinating → parallel_api_calls() gets 3 messages concurrently:
+     c. If procrastinating → parallel_api_calls() gets 2 messages concurrently:
         - heckler message (snarky coach text)
-        - pledge message (one-liner user must type)
         - countdown message (one-word distraction source)
      d. procrastination_sequence() → show popup, play TTS, run countdown
+     e. Log determination + screenshots to logs/<session>/session.jsonl
 
 procrastination_event.py (Tkinter)
-  - Full-screen popup: shows heckler message, requires typing pledge exactly to dismiss
+  - Full-screen popup: shows heckler message (user closes manually)
   - Countdown timer window
 
 utils.py
@@ -58,13 +58,14 @@ utils.py
   - TTS via Eleven Labs API, playback via sounddevice
 
 config_prompts.yaml
-  - All LLM system/user prompts for: determination, heckler, pledge, countdown roles
+  - All LLM system/user prompts for: determination, heckler, countdown roles
 ```
 
 ## Key Design Details
 
 - **Two GUI frameworks**: PyQt5 for main app, Tkinter for procrastination popup (separate process context)
-- **Parallel API calls**: heckler, pledge, and countdown messages fetched concurrently via ThreadPoolExecutor
+- **Parallel API calls**: heckler and countdown messages fetched concurrently via ThreadPoolExecutor
+- **Audit logging**: each session saves screenshots and a JSONL log to `logs/<timestamp>/`
 - **Settings persistence**: `settings.json` (gitignored, created at runtime)
 - **Platform**: macOS only (screencapture, PyObjC)
 

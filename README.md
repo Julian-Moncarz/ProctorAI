@@ -3,7 +3,7 @@
 Forked and updated for personal use
 
 ## 🔍 Overview
-ProctorAI is a multimodal AI that watches your screen and calls you out if it sees you procrastinating. Proctor works by taking screenshots of your computer every few seconds (at a specified interval) and feeding them into OpenAI's gpt-5-nano. If ProctorAI determines that you are not focused, it will take control of your screen and yell at you with a personalized message. After making you pledge to stop procrastinating, ProctorAI will then give you 15 seconds to close the source of procrastination or will continue to bug you.
+ProctorAI is a multimodal AI that watches your screen and calls you out if it sees you procrastinating. Proctor works by taking screenshots of your computer every few seconds (at a specified interval) and feeding them into OpenAI's gpt-5-nano. If ProctorAI determines that you are not focused, it will take control of your screen and yell at you with a personalized message, then give you 15 seconds to close the source of procrastination or will continue to bug you.
 
 ## 🚀 Setup and Installation
 To start the GUI, just type ./run.sh. You might get some popups asking to allow terminal access to certain utilities, which you should enable. The current implementation requires macOS.
@@ -41,3 +41,45 @@ The GUI will now appear on every login. To stop auto-starting:
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.proctorai.plist
 ```
+
+## ⚙️ Options/Settings
+The following can all be toggled in the settings page or used as CLI flags to `main.py`:
+| | |
+|------------------|---------------------------------------------------------------------------------------------------------|
+| `tts`            | Enable Eleven Labs text-to-speech                                                           |
+| `voice`          | Select the voice of Eleven Labs speaker                                                               |
+| `delay_time`     | The amount of time between each screenshot                                                                   |
+| `initial_delay`  | The amount of time to wait before Proctor starts watching your screen (useful for giving you time to open what you want to work on)                                                            |
+| `countdown_time` | The amount of time Proctor gives to close the source of procrastination                                                            |
+| `user_name`      | Enter your name to make the experience more personalized                                                       |
+
+
+## 🎯 Understanding This Repository
+
+Right now, basically all functionality is contained in the following files:
+- `src/main.py`: contains the main control loop that takes screenshots, calls the model, and initiates procrastination events
+- `src/user_interface.py`: runs the GUI written in PyQt5
+- `src/procrastination_event.py`: displays the full-screen popup when the user is caught procrastinating and the countdown timer
+- `src/utils.py`: functions for taking screenshots, tts, etc
+- `src/config_prompts.yaml`: all prompts used in the LLM scaffolded system
+
+As the program runs, it'll create a `settings.json` file, a `screenshots` folder, and a `logs/` directory (with per-session timestamped subdirectories containing archived screenshots and a `session.jsonl` audit log). If TTS is enabled, it'll also write `yell_voice.mp3` to the `src` folder.
+
+## 🧪 Testing
+
+```bash
+uv run pytest
+```
+
+Tests live in `tests/`.
+
+## 🌐 Roadmap and Future Improvements
+This project is still very much under active development. Some features I'm hoping to add next:
+- finetuning a LLaVA model specifically for the task/distribution
+- scheduling sessions, have it start running when you open your computer
+- make it extremely annoying to quit the program (at least until the user finishes their pre-defined session)
+- ~~logging, time-tracking, & summary statistics~~ (basic audit logging added)
+- summary statistics dashboard
+- improve chat feature and give model greater awareness of state/context
+- having a drafts folder for prompts so you don't have to re-type it out if you're doing the same task as you were the other day
+- mute all other sounds on computer when the TTS plays (so it isn't drowned out by music)
