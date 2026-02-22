@@ -1,20 +1,46 @@
 
 import time
 import os
+import sys
+import json
 import base64
+import signal
 import yaml
 import threading
 import concurrent.futures
+from pathlib import Path
 
 from openai import OpenAI
 from procrastination_event import ProcrastinationEvent
 from utils import take_screenshots, get_text_to_speech, play_text_to_speech
 
-
-with open(os.path.dirname(__file__)+'/config_prompts.yaml', 'r') as file:
+# Validate config
+_config_path = Path(__file__).parent / 'config_prompts.yaml'
+if not _config_path.exists():
+    print(f"Error: config file not found at {_config_path}", file=sys.stderr)
+    sys.exit(1)
+with open(_config_path, 'r') as file:
     config = yaml.safe_load(file)
 
+_required_keys = {
+    "system_prompt", "user_prompt",
+    "system_prompt_heckler", "user_prompt_heckler",
+    "system_prompt_pledge", "user_prompt_pledge",
+    "system_prompt_countdown", "user_prompt_countdown",
+}
+_missing = _required_keys - set(config.keys())
+if _missing:
+    print(f"Error: config_prompts.yaml missing keys: {_missing}", file=sys.stderr)
+    sys.exit(1)
+
+# Validate API key
+if not os.environ.get('OPENAI_API_KEY'):
+    print("Error: OPENAI_API_KEY environment variable not set.", file=sys.stderr)
+    sys.exit(1)
 client = OpenAI()
+
+API_TIMEOUT = 60
+_shutdown = threading.Event()
 
 
 def encode_image(image_path):
@@ -53,10 +79,10 @@ def determine_productivity(user_spec, image_filepaths):
                     "additionalProperties": False
                 }
             }
-        }
+        },
+        timeout=API_TIMEOUT,
     )
 
-    import json
     result = json.loads(response.choices[0].message.content)
     return result["determination"]
 
@@ -78,6 +104,7 @@ def make_api_call(role, user_prompt, system_prompt=None, image_paths=None):
     response = client.chat.completions.create(
         model="gpt-5-nano",
         messages=messages,
+        timeout=API_TIMEOUT,
     )
     return {"result": response.choices[0].message.content, "role": role}
 
@@ -88,7 +115,7 @@ def parallel_api_calls(api_params):
             executor.submit(make_api_call, p["role"], p["user_prompt"], p.get("system_prompt"), p.get("image_paths"))
             for p in api_params
         ]
-        return [f.result() for f in concurrent.futures.as_completed(futures)]
+        return [f.result(timeout=API_TIMEOUT * 2) for f in concurrent.futures.as_completed(futures, timeout=API_TIMEOUT * 2)]
 
 
 def procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, image_filepaths):
@@ -110,13 +137,16 @@ def procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, i
             countdown_message = api_result["result"]
 
     if tts:
-        voice_file = get_text_to_speech(heckler_message, voice)
-        tts_thread = threading.Thread(target=play_text_to_speech, args=(voice_file,))
-        tts_thread.start()
+        try:
+            voice_file = get_text_to_speech(heckler_message, voice)
+            tts_thread = threading.Thread(target=play_text_to_speech, args=(voice_file,))
+            tts_thread.start()
+        except Exception as e:
+            print(f"Warning: TTS failed, continuing without audio: {e}")
 
     procrastination_event = ProcrastinationEvent()
     procrastination_event.show_popup(heckler_message, pledge_message)
-    procrastination_event.play_countdown(countdown_time, brief_message=f"You have {countdown_time} seconds to close " + countdown_message.strip())
+    procrastination_event.play_countdown(countdown_time, brief_message=f"You have {countdown_time} seconds to close {countdown_message.strip()}")
 
 
 def process_one_cycle(user_spec, tts, voice, countdown_time, user_name):
@@ -124,32 +154,51 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name):
     screenshots = take_screenshots()
     filepaths = [shot["filepath"] for shot in screenshots]
 
-    determination = determine_productivity(user_spec, filepaths)
-    print(f"Determination: {determination}")
+    if not filepaths:
+        print("Warning: No screenshots captured, skipping cycle.")
+        return "skipped"
 
-    if determination == "procrastinating":
-        procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, filepaths)
+    try:
+        determination = determine_productivity(user_spec, filepaths)
+        print(f"Determination: {determination}")
 
-    # Delete screenshots after use
-    for fp in filepaths:
-        try:
-            os.remove(fp)
-        except OSError:
-            pass
+        if determination == "procrastinating":
+            procrastination_sequence(user_spec, user_name, tts, voice, countdown_time, filepaths)
+    finally:
+        # Delete screenshots after all API calls are done
+        for fp in filepaths:
+            try:
+                os.remove(fp)
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                print(f"Warning: could not delete {fp}: {e}")
 
     return determination
 
 
 def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_time=15, user_name="Procrastinator"):
-    os.makedirs(os.path.dirname(os.path.dirname(__file__)) + "/screenshots", exist_ok=True)
+    os.makedirs(Path(__file__).parent.parent / "screenshots", exist_ok=True)
 
     user_spec = input()
 
+    signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
+    signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
+
     time.sleep(initial_delay)
 
-    while True:
-        process_one_cycle(user_spec, tts, voice, countdown_time, user_name)
+    while not _shutdown.is_set():
+        try:
+            process_one_cycle(user_spec, tts, voice, countdown_time, user_name)
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"Error in cycle: {e}")
+            time.sleep(5)  # back off on error
+            continue
         time.sleep(delay_time)
+
+    print("Shutting down.")
 
 
 if __name__ == "__main__":
