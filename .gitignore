@@ -8,3 +8,4 @@ __pycache__/
 com.proctorai.plist
 src/yell_voice.*
 memory.md
+.env
