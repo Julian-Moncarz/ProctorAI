@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-ProctorAI is a macOS-only multimodal AI productivity tool. It runs as a background daemon that periodically screenshots your screen, sends images to Claude Haiku 4.5 via the Anthropic SDK, and intervenes with a full-screen Tkinter popup + optional TTS heckling when it detects you're off-task. Tasks are pulled automatically from a Notion database (filtered to "Must be done this week", not Done).
+ProctorAI is a macOS-only multimodal AI productivity tool. It runs as a background daemon that periodically screenshots your screen, sends images to Claude Haiku 4.5 via the Anthropic SDK, and intervenes with a native macOS dialog + optional TTS heckling when it detects you're off-task. If still procrastinating after 10s, it force-closes the frontmost window (Cmd+W). Tasks are pulled fresh from a Notion database each cycle (filtered to "Must be done this week", not Done).
 
 ## Running
 
@@ -37,22 +37,22 @@ Tests live in `tests/`. Uses pytest + pytest-mock.
 
 ```
 main.py (core loop)
-  1. Fetch weekly tasks from Notion via notion_tasks.py (cached 10min)
+  1. Fetch weekly tasks from Notion via notion_tasks.py (fresh each cycle)
   2. Loop every delay_time seconds:
      a. take_screenshots() → macOS screencapture, all monitors
      b. encode_image_720p() → downsize for faster API calls
      c. _check_screen() → Claude Haiku 4.5 API call (tool_use) → {determination, reasoning, heckler_message}
      d. Loads memory.md each cycle for preferences/rules
-     e. If procrastinating → Tkinter popup + optional TTS + countdown
-     f. Log to logs/<session>/session.jsonl
+     e. If procrastinating → native macOS dialog + optional TTS
+     f. 10s later: re-check → if still procrastinating, Cmd+W closes frontmost window
+     g. Log to logs/<session>/session.jsonl
 
 notion_tasks.py
   - Queries Notion API for tasks with Timing="Must be done this week" and Status≠Done
-  - 10-minute in-memory cache
+  - Fresh fetch every cycle (no cache)
 
-procrastination_event.py (Tkinter)
-  - Full-screen popup with heckler message
-  - Countdown timer window
+procrastination_event.py (osascript)
+  - Native macOS dialog with heckler message (auto-dismisses after 30s)
 
 utils.py
   - take_screenshots(): macOS `screencapture` command
@@ -70,9 +70,10 @@ config_prompts.yaml
 
 ## Key Design Details
 
-- **No GUI**: runs headless as a daemon; Tkinter is only used for procrastination popups
+- **No GUI**: runs headless as a daemon; osascript dialogs for procrastination alerts
 - **Single API call**: determination + heckler message via Claude tool_use (~1-2s per cycle)
-- **Notion integration**: tasks auto-refresh from Notion every 10 minutes; no manual task entry
+- **Escalation**: popup → 10s re-check → force-close window if still off-task
+- **Notion integration**: tasks fetched fresh from Notion every cycle; no manual task entry
 - **Persistent memory**: memory.md is loaded every cycle, edit to change behavior/rules
 - **Audit logging**: each session saves screenshots + JSONL log to `logs/<timestamp>/`
 - **Graceful shutdown**: handles SIGTERM/SIGINT via threading.Event
