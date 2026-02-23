@@ -53,6 +53,7 @@ notion_tasks.py
 
 procrastination_event.py (osascript)
   - Native macOS dialog with heckler message (auto-dismisses after 30s)
+  - Shame-texts: sends iMessage to PROCTOR_SHAME_CONTACTS via osascript
 
 utils.py
   - take_screenshots(): macOS `screencapture` command
@@ -72,7 +73,7 @@ config_prompts.yaml
 
 - **No GUI**: runs headless as a daemon; osascript dialogs for procrastination alerts
 - **Single API call**: determination + heckler message via Claude tool_use (~1-2s per cycle)
-- **Escalation**: popup → 10s re-check → force-close window if still off-task
+- **Escalation**: popup + shame-texts → 10s re-check → force-close window if still off-task
 - **Notion integration**: tasks fetched fresh from Notion every cycle; no manual task entry
 - **Persistent memory**: memory.md is loaded every cycle, edit to change behavior/rules
 - **Audit logging**: each session saves screenshots + JSONL log to `logs/<timestamp>/`
@@ -84,3 +85,4 @@ config_prompts.yaml
 - `ANTHROPIC_API_KEY` (required) — Claude API
 - `NOTION_TOKEN` (required) — Notion integration token
 - `ELEVEN_LABS_API_KEY` (required for TTS)
+- `PROCTOR_SHAME_CONTACTS` (optional) — comma-separated phone numbers for iMessage shame-texts (stored in `.env`)
