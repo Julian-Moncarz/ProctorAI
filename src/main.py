@@ -111,13 +111,7 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
             except Exception as e:
                 print(f"Warning: TTS failed, continuing without audio: {e}")
 
-        def _show_procrastination_ui():
-            procrastination_event = ProcrastinationEvent()
-            procrastination_event.show_popup(heckler_msg)
-            procrastination_event.play_countdown(countdown_time, brief_message=f"You have {countdown_time} seconds to get back to work")
-
-        ui_thread = threading.Thread(target=_show_procrastination_ui, daemon=True)
-        ui_thread.start()
+        ProcrastinationEvent().show_popup(heckler_msg)
 
     # Move screenshots to log dir
     saved_names = []
@@ -170,12 +164,23 @@ def main(tts=False, voice="Adam", delay_time=60, countdown_time=15, user_name="J
             tasks = get_weekly_tasks()
             if tasks:
                 user_spec = format_task_list(tasks)
-            process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
+            result = process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
+            if result == "procrastinating":
+                print("Re-checking in 10s...")
+                time.sleep(10)
+                result2 = process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
+                if result2 == "procrastinating":
+                    print("Still procrastinating — force-closing frontmost window.")
+                    import subprocess
+                    subprocess.run([
+                        "osascript", "-e",
+                        'tell application "System Events" to keystroke "w" using command down'
+                    ])
         except KeyboardInterrupt:
             break
         except Exception as e:
             print(f"Error in cycle: {e}")
-            time.sleep(5)  # back off on error
+            time.sleep(5)
             continue
         time.sleep(delay_time)
 
