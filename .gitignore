@@ -7,3 +7,4 @@ __pycache__/
 .DS_Store
 com.proctorai.plist
 src/yell_voice.*
+memory.md

@@ -6,12 +6,11 @@ import signal
 import shutil
 import yaml
 import threading
+import base64
 from datetime import datetime
 from pathlib import Path
 
-import base64 as b64_mod
-from google import genai
-from google.genai import types
+import anthropic
 from procrastination_event import ProcrastinationEvent
 from utils import take_screenshots, encode_image_720p, get_text_to_speech, play_text_to_speech
 from notion_tasks import get_weekly_tasks, format_task_list
@@ -25,42 +24,65 @@ with open(_config_path, 'r') as file:
     config = yaml.safe_load(file)
 
 # Validate API key
-if not os.environ.get('GOOGLE_API_KEY'):
-    print("Error: GOOGLE_API_KEY environment variable not set.", file=sys.stderr)
+if not os.environ.get('ANTHROPIC_API_KEY'):
+    print("Error: ANTHROPIC_API_KEY environment variable not set.", file=sys.stderr)
     sys.exit(1)
-client = genai.Client(api_key=os.environ['GOOGLE_API_KEY'])
+client = anthropic.Anthropic()
 
 _shutdown = threading.Event()
 
+MEMORY_PATH = Path(__file__).parent.parent / "memory.md"
 
-_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "reasoning": {"type": "string"},
-        "determination": {"type": "string", "enum": ["productive", "procrastinating"]},
-        "heckler_message": {"type": "string"},
-    },
-    "required": ["reasoning", "determination", "heckler_message"],
-}
+
+def _load_memory():
+    """Load persistent memory file, return empty string if missing."""
+    if MEMORY_PATH.exists():
+        return MEMORY_PATH.read_text().strip()
+    return "(No memory file found. Create memory.md in the project root to add preferences.)"
 
 
 def _check_screen(user_spec, user_name, encoded_images):
-    """Single API call: determine productivity and generate heckler message if procrastinating."""
-    image_parts = [
-        types.Part(inline_data=types.Blob(mime_type="image/png", data=b64_mod.b64decode(img)))
-        for img in encoded_images
-    ]
-    prompt = config["system_prompt_combined"].format(user_name=user_name) + "\n\n" + config["user_prompt_combined"].format(user_spec=user_spec, user_name=user_name)
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=[types.Content(role="user", parts=[types.Part(text=prompt), *image_parts])],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=_RESPONSE_SCHEMA,
-        ),
+    """Single API call: determine productivity and generate message if off-task."""
+    memory = _load_memory()
+    system_prompt = config["system_prompt"].format(user_name=user_name)
+    user_prompt = config["user_prompt"].format(
+        user_name=user_name, user_spec=user_spec, memory=memory
     )
-    return json.loads(response.text)
+
+    # Build content: text prompt + images
+    content = [{"type": "text", "text": user_prompt}]
+    for img in encoded_images:
+        content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/png", "data": img},
+        })
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        system=system_prompt,
+        messages=[{"role": "user", "content": content}],
+        tools=[{
+            "name": "report",
+            "description": "Report the productivity determination",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "reasoning": {"type": "string", "description": "Brief reasoning about what you see on screen"},
+                    "determination": {"type": "string", "enum": ["productive", "procrastinating"]},
+                    "heckler_message": {"type": "string", "description": "Message to show if procrastinating, empty string if productive"},
+                },
+                "required": ["reasoning", "determination", "heckler_message"],
+            },
+        }],
+        tool_choice={"type": "tool", "name": "report"},
+    )
+
+    # Extract tool use result
+    for block in response.content:
+        if block.type == "tool_use":
+            return block.input
+    raise RuntimeError("No tool_use block in response")
 
 
 def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir):
@@ -118,7 +140,7 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
     return determination
 
 
-def main(tts=False, voice="Patrick", delay_time=60, countdown_time=15, user_name="Julian"):
+def main(tts=False, voice="Adam", delay_time=60, countdown_time=15, user_name="Julian"):
     os.makedirs(Path(__file__).parent.parent / "screenshots", exist_ok=True)
 
     log_dir = Path(__file__).parent.parent / "logs" / datetime.now().strftime("%Y-%m-%d_%H%M%S")
@@ -160,7 +182,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--tts", help="Enable heckling", action="store_true")
-    parser.add_argument("--voice", help="Set voice", default="Patrick", type=str)
+    parser.add_argument("--voice", help="Set voice", default="Adam", type=str)
     parser.add_argument("--delay_time", help="Seconds between checks", default=60, type=int)
     parser.add_argument("--countdown_time", help="Set countdown time", default=15, type=int)
     parser.add_argument("--user_name", help="Set user name", default="Julian", type=str)

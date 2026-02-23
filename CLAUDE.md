@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-ProctorAI is a macOS-only multimodal AI productivity tool. It runs as a background daemon that periodically screenshots your screen, sends images to Gemini 2.5 Flash-Lite via the Google GenAI SDK, and intervenes with a full-screen Tkinter popup + optional TTS heckling when it detects you're off-task. Tasks are pulled automatically from a Notion database (filtered to "Must be done this week", not Done).
+ProctorAI is a macOS-only multimodal AI productivity tool. It runs as a background daemon that periodically screenshots your screen, sends images to Claude Haiku 4.5 via the Anthropic SDK, and intervenes with a full-screen Tkinter popup + optional TTS heckling when it detects you're off-task. Tasks are pulled automatically from a Notion database (filtered to "Must be done this week", not Done).
 
 ## Running
 
@@ -41,9 +41,10 @@ main.py (core loop)
   2. Loop every delay_time seconds:
      a. take_screenshots() → macOS screencapture, all monitors
      b. encode_image_720p() → downsize for faster API calls
-     c. _check_screen() → single Gemini API call → {determination, reasoning, heckler_message}
-     d. If procrastinating → Tkinter popup + optional TTS + countdown
-     e. Log to logs/<session>/session.jsonl
+     c. _check_screen() → Claude Haiku 4.5 API call (tool_use) → {determination, reasoning, heckler_message}
+     d. Loads memory.md each cycle for preferences/rules
+     e. If procrastinating → Tkinter popup + optional TTS + countdown
+     f. Log to logs/<session>/session.jsonl
 
 notion_tasks.py
   - Queries Notion API for tasks with Timing="Must be done this week" and Status≠Done
@@ -58,21 +59,27 @@ utils.py
   - encode_image_720p(): downsize to 720p
   - TTS via Eleven Labs API, playback via sounddevice
 
+memory.md (gitignored)
+  - Persistent memory: user preferences, behavior rules, corrections
+  - All prompt logic lives here — edit to change ProctorAI's behavior
+  - Raycast script (edit-proctor-memory.sh) opens it quickly
+
 config_prompts.yaml
-  - System/user prompts for the single-call screen check
+  - Minimal system/user prompts that point to memory.md for rules
 ```
 
 ## Key Design Details
 
 - **No GUI**: runs headless as a daemon; Tkinter is only used for procrastination popups
-- **Single API call**: determination + heckler message in one Gemini call (~1.5s per cycle)
+- **Single API call**: determination + heckler message via Claude tool_use (~1-2s per cycle)
 - **Notion integration**: tasks auto-refresh from Notion every 10 minutes; no manual task entry
+- **Persistent memory**: memory.md is loaded every cycle, edit to change behavior/rules
 - **Audit logging**: each session saves screenshots + JSONL log to `logs/<timestamp>/`
 - **Graceful shutdown**: handles SIGTERM/SIGINT via threading.Event
 - **Platform**: macOS only (screencapture, PyObjC)
 
 ## Environment Variables
 
-- `GOOGLE_API_KEY` (required) — Gemini API
+- `ANTHROPIC_API_KEY` (required) — Claude API
 - `NOTION_TOKEN` (required) — Notion integration token
 - `ELEVEN_LABS_API_KEY` (required for TTS)

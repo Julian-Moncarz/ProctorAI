@@ -4,27 +4,26 @@ from unittest.mock import MagicMock
 
 
 def test_process_one_cycle_productive(mocker, fake_image, tmp_path):
-    """When productive, process_one_cycle should not trigger procrastination_sequence."""
+    """When productive, process_one_cycle should not show popup."""
     mocker.patch("main.take_screenshots", return_value=[{"filepath": fake_image, "timestamp": "t"}])
+    mocker.patch("main._load_memory", return_value="test memory")
 
+    # Mock Anthropic client to return productive determination
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.input = {"reasoning": "Working on task", "determination": "productive", "heckler_message": ""}
     mock_response = MagicMock()
-    mock_response.choices = [
-        MagicMock(message=MagicMock(content=json.dumps({"determination": "productive"})))
-    ]
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_response
-    mocker.patch("main.client", mock_client)
+    mock_response.content = [tool_block]
+    mocker.patch("main.client").messages.create.return_value = mock_response
 
-    mock_sequence = mocker.patch("main.procrastination_sequence")
+    mock_popup = mocker.patch("main.ProcrastinationEvent")
 
     from main import process_one_cycle
-
     result = process_one_cycle("Write code", False, "Patrick", 15, "User", tmp_path)
 
     assert result == "productive"
-    mock_sequence.assert_not_called()
+    mock_popup.assert_not_called()
 
-    # Verify audit log was written
     log_file = tmp_path / "session.jsonl"
     assert log_file.exists()
     entry = json.loads(log_file.read_text().strip())
@@ -33,31 +32,29 @@ def test_process_one_cycle_productive(mocker, fake_image, tmp_path):
 
 
 def test_process_one_cycle_procrastinating(mocker, fake_image, tmp_path):
-    """When procrastinating, process_one_cycle should trigger procrastination_sequence."""
+    """When procrastinating, process_one_cycle should show popup."""
     mocker.patch("main.take_screenshots", return_value=[{"filepath": fake_image, "timestamp": "t"}])
+    mocker.patch("main._load_memory", return_value="test memory")
 
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.input = {"reasoning": "On Twitter", "determination": "procrastinating", "heckler_message": "Get back to work!"}
     mock_response = MagicMock()
-    mock_response.choices = [
-        MagicMock(message=MagicMock(content=json.dumps({"determination": "procrastinating"})))
-    ]
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_response
-    mocker.patch("main.client", mock_client)
+    mock_response.content = [tool_block]
+    mocker.patch("main.client").messages.create.return_value = mock_response
 
-    mock_sequence = mocker.patch("main.procrastination_sequence", return_value=("Stop it!", "", "twitter"))
+    mock_event = MagicMock()
+    mocker.patch("main.ProcrastinationEvent", return_value=mock_event)
 
     from main import process_one_cycle
-
-    result = process_one_cycle("Write code", True, "Patrick", 15, "User", tmp_path)
+    result = process_one_cycle("Write code", False, "Patrick", 15, "User", tmp_path)
 
     assert result == "procrastinating"
-    mock_sequence.assert_called_once()
+    mock_event.show_popup.assert_called_once_with("Get back to work!")
 
-    # Verify audit log includes procrastination fields
     entry = json.loads((tmp_path / "session.jsonl").read_text().strip())
     assert entry["determination"] == "procrastinating"
-    assert entry["heckler"] == "Stop it!"
-    assert entry["countdown_word"] == "twitter"
+    assert entry["heckler"] == "Get back to work!"
 
 
 def test_process_one_cycle_moves_screenshots(mocker, fake_image, tmp_path):
@@ -65,14 +62,18 @@ def test_process_one_cycle_moves_screenshots(mocker, fake_image, tmp_path):
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     mocker.patch("main.take_screenshots", return_value=[{"filepath": fake_image, "timestamp": "t"}])
-    mocker.patch("main.determine_productivity", return_value="productive")
+    mocker.patch("main._load_memory", return_value="test memory")
+
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.input = {"reasoning": "Working", "determination": "productive", "heckler_message": ""}
+    mock_response = MagicMock()
+    mock_response.content = [tool_block]
+    mocker.patch("main.client").messages.create.return_value = mock_response
 
     from main import process_one_cycle
-
     process_one_cycle("Write code", False, "Patrick", 15, "User", log_dir)
 
-    # Screenshot should be moved to log dir
     moved = log_dir / Path(fake_image).name
     assert moved.exists()
-    # Original should be gone
     assert not Path(fake_image).exists()
