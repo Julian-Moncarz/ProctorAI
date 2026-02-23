@@ -4,16 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-ProctorAI is a macOS-only multimodal AI productivity tool. It periodically screenshots your screen, sends images to Gemini 2.5 Flash-Lite via the Google GenAI SDK, and intervenes with a full-screen popup when it detects procrastination. The user defines their task, allowed behaviors, and what counts as procrastination before each session.
+ProctorAI is a macOS-only multimodal AI productivity tool. It runs as a background daemon that periodically screenshots your screen, sends images to Gemini 2.5 Flash-Lite via the Google GenAI SDK, and intervenes with a full-screen Tkinter popup + optional TTS heckling when it detects you're off-task. Tasks are pulled automatically from a Notion database (filtered to "Must be done this week", not Done).
 
 ## Running
 
 ```bash
-./run.sh                    # Launch PyQt5 GUI (uses uv run)
-uv run python src/main.py   # Direct CLI mode (reads task spec from stdin)
+./run.sh                    # Launch with TTS, 60s delay (uses uv run)
+uv run python src/main.py   # Direct run, no TTS
 ```
 
-CLI flags: `--tts`, `--voice NAME`, `--delay_time N`, `--initial_delay N`, `--countdown_time N`, `--user_name NAME`
+CLI flags: `--tts`, `--voice NAME`, `--delay_time N`, `--countdown_time N`, `--user_name NAME`
 
 ## Dependencies
 
@@ -28,6 +28,7 @@ uv sync --group dev         # Include dev dependencies (pytest)
 
 ```bash
 uv run pytest               # Run all tests
+uv run pytest tests/test_cycle.py -k "test_name"  # Single test
 ```
 
 Tests live in `tests/`. Uses pytest + pytest-mock.
@@ -35,40 +36,43 @@ Tests live in `tests/`. Uses pytest + pytest-mock.
 ## Architecture
 
 ```
-user_interface.py (PyQt5 GUI)
-  └→ spawns main.py as subprocess, pipes task spec via stdin
-
 main.py (core loop)
-  1. Read task spec from stdin
-  2. Wait initial_delay, then loop:
-     a. utils.take_screenshots() → macOS screencapture, all monitors
-     b. encode_image_720p() → downsize to 720p for faster API calls
-     c. _check_screen() → single Gemini API call returns determination + heckler message
-     d. If procrastinating → show popup, play TTS, run countdown
-     e. Log determination, reasoning + screenshots to logs/<session>/session.jsonl
+  1. Fetch weekly tasks from Notion via notion_tasks.py (cached 10min)
+  2. Loop every delay_time seconds:
+     a. take_screenshots() → macOS screencapture, all monitors
+     b. encode_image_720p() → downsize for faster API calls
+     c. _check_screen() → single Gemini API call → {determination, reasoning, heckler_message}
+     d. If procrastinating → Tkinter popup + optional TTS + countdown
+     e. Log to logs/<session>/session.jsonl
+
+notion_tasks.py
+  - Queries Notion API for tasks with Timing="Must be done this week" and Status≠Done
+  - 10-minute in-memory cache
 
 procrastination_event.py (Tkinter)
-  - Full-screen popup: shows heckler message (user closes manually)
+  - Full-screen popup with heckler message
   - Countdown timer window
 
 utils.py
   - take_screenshots(): macOS `screencapture` command
-  - encode_image_720p(): downsize screenshots for faster API calls
+  - encode_image_720p(): downsize to 720p
   - TTS via Eleven Labs API, playback via sounddevice
 
 config_prompts.yaml
-  - Combined system/user prompts for single-call screen check
+  - System/user prompts for the single-call screen check
 ```
 
 ## Key Design Details
 
-- **Two GUI frameworks**: PyQt5 for main app, Tkinter for procrastination popup (separate process context)
+- **No GUI**: runs headless as a daemon; Tkinter is only used for procrastination popups
 - **Single API call**: determination + heckler message in one Gemini call (~1.5s per cycle)
-- **Audit logging**: each session saves screenshots and a JSONL log to `logs/<timestamp>/` (includes task spec, determination reasoning)
-- **Settings persistence**: `settings.json` (gitignored, created at runtime)
+- **Notion integration**: tasks auto-refresh from Notion every 10 minutes; no manual task entry
+- **Audit logging**: each session saves screenshots + JSONL log to `logs/<timestamp>/`
+- **Graceful shutdown**: handles SIGTERM/SIGINT via threading.Event
 - **Platform**: macOS only (screencapture, PyObjC)
 
 ## Environment Variables
 
-- `GOOGLE_API_KEY` (required)
-- `ELEVEN_LABS_API_KEY` (required for TTS feature)
+- `GOOGLE_API_KEY` (required) — Gemini API
+- `NOTION_TOKEN` (required) — Notion integration token
+- `ELEVEN_LABS_API_KEY` (required for TTS)
