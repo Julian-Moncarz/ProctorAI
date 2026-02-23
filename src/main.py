@@ -105,7 +105,24 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
     if determination == "procrastinating":
         # Force-close frontmost window first, then show the popup
         import subprocess as _sp
-        _sp.run(["osascript", "-e", 'tell application "System Events" to keystroke "w" using command down'])
+        _sp.run(["osascript", "-e", '''
+tell application "System Events"
+    set frontApp to name of first application process whose frontmost is true
+    tell application process frontApp
+        try
+            click menu item "Close Window" of menu "File" of menu bar 1
+        on error
+            try
+                click menu item "Close Tab" of menu "File" of menu bar 1
+            on error
+                try
+                    click menu item "Close" of menu "File" of menu bar 1
+                end try
+            end try
+        end try
+    end tell
+end tell
+'''])
 
         if tts:
             try:
