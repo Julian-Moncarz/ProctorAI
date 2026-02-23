@@ -8,7 +8,7 @@ DATABASE_ID = "2fa1a1849c7b809dba95f6fa1e4d8f9e"
 NOTION_API = "https://api.notion.com/v1/databases"
 
 _cache = {"tasks": None, "fetched_at": 0}
-CACHE_TTL = 600  # 10 minutes
+CACHE_TTL = 0  # fetch fresh every cycle
 
 
 def _fetch_from_notion():
