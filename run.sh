@@ -1,2 +1,2 @@
 #!/bin/bash
-uv run python src/user_interface.py
+uv run python src/main.py --tts --delay_time 60

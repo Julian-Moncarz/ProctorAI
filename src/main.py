@@ -1,4 +1,3 @@
-
 import time
 import os
 import sys
@@ -15,6 +14,7 @@ from google import genai
 from google.genai import types
 from procrastination_event import ProcrastinationEvent
 from utils import take_screenshots, encode_image_720p, get_text_to_speech, play_text_to_speech
+from notion_tasks import get_weekly_tasks, format_task_list
 
 # Validate config
 _config_path = Path(__file__).parent / 'config_prompts.yaml'
@@ -24,19 +24,12 @@ if not _config_path.exists():
 with open(_config_path, 'r') as file:
     config = yaml.safe_load(file)
 
-_required_keys = {"system_prompt_combined", "user_prompt_combined"}
-_missing = _required_keys - set(config.keys())
-if _missing:
-    print(f"Error: config_prompts.yaml missing keys: {_missing}", file=sys.stderr)
-    sys.exit(1)
-
 # Validate API key
 if not os.environ.get('GOOGLE_API_KEY'):
     print("Error: GOOGLE_API_KEY environment variable not set.", file=sys.stderr)
     sys.exit(1)
 client = genai.Client(api_key=os.environ['GOOGLE_API_KEY'])
 
-API_TIMEOUT = 60
 _shutdown = threading.Event()
 
 
@@ -125,13 +118,18 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
     return determination
 
 
-def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_time=15, user_name="Procrastinator"):
+def main(tts=False, voice="Patrick", delay_time=60, countdown_time=15, user_name="Julian"):
     os.makedirs(Path(__file__).parent.parent / "screenshots", exist_ok=True)
 
     log_dir = Path(__file__).parent.parent / "logs" / datetime.now().strftime("%Y-%m-%d_%H%M%S")
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    user_spec = input()
+    tasks = get_weekly_tasks()
+    user_spec = format_task_list(tasks)
+    if not tasks:
+        print("Warning: No 'Must be done this week' tasks found in Notion. Exiting.")
+        sys.exit(0)
+    print(f"Loaded {len(tasks)} weekly tasks from Notion:\n{user_spec}")
 
     # Log task spec at session start
     with open(log_dir / "session.jsonl", "a") as f:
@@ -140,10 +138,12 @@ def main(tts=False, voice="Patrick", delay_time=0, initial_delay=0, countdown_ti
     signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
     signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
 
-    time.sleep(initial_delay)
-
     while not _shutdown.is_set():
         try:
+            # Refresh task list from Notion (cached, refreshes every 10 min)
+            tasks = get_weekly_tasks()
+            if tasks:
+                user_spec = format_task_list(tasks)
             process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
         except KeyboardInterrupt:
             break
@@ -161,10 +161,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--tts", help="Enable heckling", action="store_true")
     parser.add_argument("--voice", help="Set voice", default="Patrick", type=str)
-    parser.add_argument("--delay_time", help="Set delay time", default=0, type=int)
-    parser.add_argument("--initial_delay", help="Initial delay so user can open relevant apps", default=0, type=int)
+    parser.add_argument("--delay_time", help="Seconds between checks", default=60, type=int)
     parser.add_argument("--countdown_time", help="Set countdown time", default=15, type=int)
-    parser.add_argument("--user_name", help="Set user name", default="Procrastinator", type=str)
+    parser.add_argument("--user_name", help="Set user name", default="Julian", type=str)
 
     args = parser.parse_args()
-    main(tts=args.tts, voice=args.voice, delay_time=args.delay_time, initial_delay=args.initial_delay, countdown_time=args.countdown_time, user_name=args.user_name)
+    main(tts=args.tts, voice=args.voice, delay_time=args.delay_time, countdown_time=args.countdown_time, user_name=args.user_name)

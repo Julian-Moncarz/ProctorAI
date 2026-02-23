@@ -32,6 +32,7 @@ def get_number_of_screens():
     return len(NSScreen.screens())
 
 
+
 def take_screenshots():
     """Takes screenshots of each monitor and returns a list of dicts with filepath and timestamp."""
     num_screens = get_number_of_screens()
@@ -55,6 +56,7 @@ def take_screenshots():
             print(f"Warning: screenshot file not created for display {screen}")
             continue
         screenshots.append({"filepath": str(save_filepath), "timestamp": timestamp})
+
     return screenshots
 
 
