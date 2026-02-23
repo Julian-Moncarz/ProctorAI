@@ -111,9 +111,13 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
             except Exception as e:
                 print(f"Warning: TTS failed, continuing without audio: {e}")
 
-        procrastination_event = ProcrastinationEvent()
-        procrastination_event.show_popup(heckler_msg)
-        procrastination_event.play_countdown(countdown_time, brief_message=f"You have {countdown_time} seconds to get back to work")
+        def _show_procrastination_ui():
+            procrastination_event = ProcrastinationEvent()
+            procrastination_event.show_popup(heckler_msg)
+            procrastination_event.play_countdown(countdown_time, brief_message=f"You have {countdown_time} seconds to get back to work")
+
+        ui_thread = threading.Thread(target=_show_procrastination_ui, daemon=True)
+        ui_thread.start()
 
     # Move screenshots to log dir
     saved_names = []
