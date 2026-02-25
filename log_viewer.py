@@ -17,7 +17,7 @@ PAGE_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8">
   th {{ text-align:left; padding:8px; border-bottom:2px solid #333; color:#888; position:sticky; top:0; background:#111; }}
   td {{ padding:8px; border-bottom:1px solid #222; vertical-align:top; }}
   .img-cell img {{ max-width:320px; border-radius:4px; }}
-  .ts {{ font-size:11px; color:#666; margin-top:4px; }}
+  .ts {{ font-size:15px; color:#aaa; margin-top:6px; font-weight:600; }}
   .reasoning {{ max-width:400px; font-size:13px; color:#ccc; }}
   .verdict {{ font-weight:700; font-size:15px; text-transform:uppercase; white-space:nowrap; }}
   .speech {{ max-width:300px; font-size:13px; color:#f9a825; font-style:italic; }}
@@ -28,29 +28,49 @@ PAGE_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8">
 </table>
 <script>
 let seen = 0;
-function addRow(e) {{
+function fmtTime(ts) {{
+  if (!ts) return '';
+  const d = new Date(ts);
+  const mon = d.toLocaleString('en-US', {{month:'short'}});
+  const day = d.getDate();
+  const h = d.getHours() % 12 || 12;
+  const m = String(d.getMinutes()).padStart(2,'0');
+  const ap = d.getHours() >= 12 ? 'PM' : 'AM';
+  return `${{mon}} ${{day}}, ${{h}}:${{m}} ${{ap}}`;
+}}
+function addRow(e, prepend) {{
   const tr = document.createElement('tr');
   const img = e.screenshots && e.screenshots[0] ? `<img src="/img/${{e.screenshots[0]}}" loading="lazy">` : '';
   const color = e.determination === 'procrastinating' ? '#c62828' : '#2e7d32';
   const esc = s => {{ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }};
-  tr.innerHTML = `<td class="img-cell">${{img}}<div class="ts">${{esc(e.timestamp||'')}}</div></td>
+  tr.innerHTML = `<td class="img-cell">${{img}}<div class="ts">${{esc(fmtTime(e.timestamp))}}</div></td>
     <td class="reasoning">${{esc(e.reasoning||'')}}</td>
     <td class="verdict" style="color:${{color}}">${{esc(e.determination||'')}}</td>
     <td class="speech">${{esc(e.heckler||'\\u2014')}}</td>`;
-  document.getElementById('rows').appendChild(tr);
-  tr.scrollIntoView({{behavior:'smooth'}});
+  const tbody = document.getElementById('rows');
+  if (prepend) tbody.insertBefore(tr, tbody.firstChild);
+  else tbody.appendChild(tr);
 }}
 async function poll() {{
   try {{
     const r = await fetch('/api/entries?after=' + seen);
     const data = await r.json();
-    data.forEach(addRow);
+    if (seen === 0) {{
+      data.reverse().forEach(e => addRow(e, false));
+    }} else {{
+      data.reverse().forEach(e => addRow(e, true));
+    }}
     seen += data.length;
   }} catch(e) {{}}
 }}
 poll();
 setInterval(poll, 5000);
 </script></body></html>"""
+
+
+def latest_session():
+    sessions = sorted(LOGS.iterdir())
+    return sessions[-1] if sessions else None
 
 
 def read_entries(session_dir):
@@ -69,13 +89,19 @@ def read_entries(session_dir):
 
 class Handler(SimpleHTTPRequestHandler):
     session_dir = None
+    pin_session = False  # True when user passed an explicit session
+
+    def _session(self):
+        if self.pin_session:
+            return self.session_dir
+        return latest_session() or self.session_dir
 
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/entries":
             qs = parse_qs(parsed.query)
             after = int(qs.get("after", [0])[0])
-            entries = read_entries(self.session_dir)
+            entries = read_entries(self._session())
             data = entries[after:]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -84,7 +110,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if parsed.path.startswith("/img/"):
             fname = unquote(parsed.path[5:])
-            fpath = self.session_dir / fname
+            fpath = self._session() / fname
             if fpath.exists():
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
@@ -96,7 +122,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.end_headers()
-        self.wfile.write(PAGE_HTML.format(session=self.session_dir.name).encode())
+        self.wfile.write(PAGE_HTML.format(session=self._session().name).encode())
 
     def log_message(self, *a):
         pass
@@ -104,14 +130,16 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     if len(sys.argv) > 1:
-        session_dir = LOGS / sys.argv[1]
+        Handler.session_dir = LOGS / sys.argv[1]
+        Handler.pin_session = True
     else:
-        sessions = sorted(LOGS.iterdir())
-        session_dir = sessions[-1]
+        Handler.session_dir = latest_session()
+        Handler.pin_session = False
 
-    Handler.session_dir = session_dir
+    session_dir = Handler.session_dir
 
     port = 8484
+    HTTPServer.allow_reuse_address = True
     srv = HTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}"
     print(f"Serving {session_dir.name} at {url}")

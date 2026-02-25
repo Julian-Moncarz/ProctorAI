@@ -70,7 +70,7 @@ def _check_screen(user_spec, user_name, encoded_images):
                 "properties": {
                     "reasoning": {"type": "string", "description": "Brief reasoning about what you see on screen"},
                     "determination": {"type": "string", "enum": ["productive", "procrastinating"]},
-                    "heckler_message": {"type": "string", "description": "Message to show if procrastinating, empty string if productive"},
+                    "heckler_message": {"type": "string", "description": "Short punchy message (max 15 words) if procrastinating, empty string if productive"},
                 },
                 "required": ["reasoning", "determination", "heckler_message"],
             },
@@ -103,9 +103,30 @@ def process_one_cycle(user_spec, tts, voice, countdown_time, user_name, log_dir)
     print(f"Determination: {determination} | Reasoning: {reasoning}")
 
     if determination == "procrastinating":
-        # Force-close frontmost window first, then show the popup
-        import subprocess as _sp
-        _sp.run(["osascript", "-e", '''
+        # First detection: popup + TTS + shame texts (no window close yet)
+        if tts:
+            try:
+                voice_file = get_text_to_speech(heckler_msg, voice)
+                tts_thread = threading.Thread(target=play_text_to_speech, args=(voice_file,))
+                tts_thread.start()
+            except Exception as e:
+                print(f"Warning: TTS failed, continuing without audio: {e}")
+
+        ProcrastinationEvent().show_popup(heckler_msg)
+
+        # Wait 10s, then recheck — only close window if STILL procrastinating
+        print("Rechecking in 10 seconds...")
+        time.sleep(10)
+        recheck_screenshots = take_screenshots()
+        recheck_filepaths = [s["filepath"] for s in recheck_screenshots]
+        if recheck_filepaths:
+            recheck_encoded = [encode_image_720p(fp) for fp in recheck_filepaths]
+            recheck_result = _check_screen(user_spec, user_name, recheck_encoded)
+            print(f"Recheck: {recheck_result['determination']} | {recheck_result['reasoning']}")
+            if recheck_result["determination"] == "procrastinating":
+                print("Still procrastinating — closing frontmost window.")
+                import subprocess as _sp
+                _sp.run(["osascript", "-e", '''
 tell application "System Events"
     set frontApp to name of first application process whose frontmost is true
     tell application process frontApp
@@ -123,16 +144,12 @@ tell application "System Events"
     end tell
 end tell
 '''])
-
-        if tts:
-            try:
-                voice_file = get_text_to_speech(heckler_msg, voice)
-                tts_thread = threading.Thread(target=play_text_to_speech, args=(voice_file,))
-                tts_thread.start()
-            except Exception as e:
-                print(f"Warning: TTS failed, continuing without audio: {e}")
-
-        ProcrastinationEvent().show_popup(heckler_msg)
+            # Clean up recheck screenshots
+            for fp in recheck_filepaths:
+                try:
+                    shutil.move(fp, log_dir / Path(fp).name)
+                except OSError:
+                    pass
 
     # Move screenshots to log dir
     saved_names = []

@@ -24,12 +24,18 @@ class ProcrastinationEvent:
         escaped = msg.replace('\\', '\\\\').replace('"', '\\"')
         for number in SHAME_CONTACTS:
             try:
-                subprocess.Popen([
+                result = subprocess.run([
                     "osascript", "-e",
-                    f'tell application "Messages" to send "{escaped}" to buddy "{number}"'
-                ])
-            except Exception:
-                pass
+                    f'''tell application "Messages"
+    set targetService to 1st service whose service type = iMessage
+    set targetBuddy to buddy "{number}" of targetService
+    send "{escaped}" to targetBuddy
+end tell'''
+                ], capture_output=True, text=True, timeout=10)
+                if result.returncode != 0:
+                    print(f"Warning: shame-text to {number} failed: {result.stderr.strip()}")
+            except Exception as e:
+                print(f"Warning: shame-text to {number} error: {e}")
 
 
 if __name__ == "__main__":
